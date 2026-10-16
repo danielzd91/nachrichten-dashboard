@@ -133,6 +133,13 @@ gruppen:
         farbe: "#0f5132"
         max_alter_stunden: 168     # sieben Tage: Das Institut veröffentlicht nicht täglich
         feeds: [{url: "https://www.iwkoeln.de/rss/iw-komplett.xml"}]
+      # Ausweichquelle, weil IW Köln Abrufe von GitHub-Servern mit HTTP 403 ablehnt. Gesamtfeed des iwd, alle Themen
+      # (die Artikel der Rubrik "Wachstum und Konjunktur" erscheinen deshalb auch im Block iwd darunter).
+      - name: iwd, alle Themen
+        thema: Informationsdienst des IW
+        farbe: "#9a3412"
+        max_alter_stunden: 168
+        feeds: [{url: "https://www.iwd.de/rss.xml"}]   # ungeprüft
       # iwd bietet für die Rubrik keinen eigenen Feed (der Gesamtfeed ist https://www.iwd.de/rss.xml). Das Skript liest
       # deshalb die Rubrikseite "Wachstum und Konjunktur" (Titel, Datum, Link) und zeigt die drei neuesten Artikel.
       - name: iwd
