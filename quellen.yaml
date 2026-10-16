@@ -44,6 +44,7 @@ gruppen:
         farbe: "#4338ca"
         feeds:   # Innenpolitik zuerst: Artikel aus beiden Feeds tragen dann die genauere Rubrik
           - {rubrik: Innenpolitik, url: "https://www.tagesschau.de/inland/innenpolitik/index~rss2.xml"}
+          - {rubrik: Weltwirtschaft, url: "https://www.tagesschau.de/wirtschaft/weltwirtschaft/index~rss2.xml"}
           - {rubrik: Inland,       url: "https://www.tagesschau.de/inland/index~rss2.xml"}
 
   - titel: Niedersachsen
@@ -121,6 +122,32 @@ gruppen:
         max_pro_quelle: 3
         max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
         feeds: [{<<: *pm, url: "https://www.mj.niedersachsen.de/startseite/aktuelles/presseinformationen/"}]
+
+  - titel: Wirtschaft und Bundespolitik
+    untertitel: IW Köln, iwd und Deutscher Bundestag
+    layout: bloecke
+    max_pro_quelle: 5
+    quellen:
+      - name: IW Köln
+        thema: Institut der deutschen Wirtschaft
+        farbe: "#0f5132"
+        max_alter_stunden: 168     # sieben Tage: Das Institut veröffentlicht nicht täglich
+        feeds: [{url: "https://www.iwkoeln.de/rss/iw-komplett.xml"}]
+      # iwd bietet für die Rubrik keinen eigenen Feed (der Gesamtfeed ist https://www.iwd.de/rss.xml). Das Skript liest
+      # deshalb die Rubrikseite "Wachstum und Konjunktur" (Titel, Datum, Link) und zeigt die drei neuesten Artikel.
+      - name: iwd
+        thema: Wachstum und Konjunktur
+        farbe: "#0369a1"
+        max_pro_quelle: 3
+        max_alter_stunden: 0
+        feeds:
+          - url: "https://www.iwd.de/wirtschaft-und-politik/wachstum-und-konjunktur/"
+            href_muster: "^https://www\\.iwd\\.de/artikel/[^/?#]+-\\d+/$"
+      - name: Deutscher Bundestag
+        thema: Pressemitteilungen
+        farbe: "#7f1d1d"
+        max_alter_stunden: 168
+        feeds: [{url: "https://www.bundestag.de/services/rss/506610-506610"}]   # ungeprüft: Antwort kam mir als HTML-Ansicht des Feeds
 
   - titel: International
     untertitel: Die fünf wichtigsten Meldungen
