@@ -1,0 +1,75 @@
+name: Dashboard bauen und verschlüsselt veröffentlichen
+
+on:
+  schedule:
+    # 05:15 UTC = 06:15 Uhr Sommerzeit bzw. 05:15 Uhr Winterzeit. GitHub startet geplante Läufe oft
+    # einige Minuten später.
+    - cron: "15 4 * * *"
+  workflow_dispatch:        # zusätzlich von Hand startbar (Reiter Actions -> Run workflow)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  TZ: Europe/Berlin         # sonst zeigt das Dashboard Uhrzeiten in UTC
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v6
+
+      - name: R einrichten
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true      # fertig gebaute Pakete: Installation in Sekunden statt Minuten
+
+      - name: R-Pakete installieren
+        run: Rscript -e 'install.packages(c("httr", "curl", "xml2", "yaml", "dplyr", "purrr", "htmltools"))'
+
+      - name: Dashboard erzeugen
+        run: Rscript dashboard.R --no-open
+
+      - name: Seite verschlüsseln
+        env:
+          STATICRYPT_PASSWORD: ${{ secrets.DASHBOARD_PASSWORT }}
+        run: |
+          if [ -z "$STATICRYPT_PASSWORD" ]; then
+            echo "Das Secret DASHBOARD_PASSWORT fehlt (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          # .staticrypt.json enthält das (nicht geheime) Salz; es bleibt gleich, damit "Auf diesem Gerät merken"
+          # nach der täglichen Neuerstellung weiter funktioniert.
+          npx --yes staticrypt@3 dashboard.html -d public --remember 30 --short \
+            --template-title "Nachrichten" \
+            --template-button "Öffnen" \
+            --template-placeholder "Passwort" \
+            --template-remember "Auf diesem Gerät merken" \
+            --template-error "Falsches Passwort" \
+            --template-color-primary "#1f2937" \
+            --template-color-secondary "#e8edf2"
+          mv public/dashboard.html public/index.html
+
+      - name: Seite zum Veröffentlichen bereitstellen
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Auf GitHub Pages veröffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4
