@@ -1,0 +1,142 @@
+# Einstellungen für alle Gruppen
+max_alter_stunden: 48     # ältere Meldungen werden ausgeblendet (Meldungen ohne Zeitstempel bleiben);
+                          # je Quelle überschreibbar, 0 = keine Altersgrenze
+timeout_sekunden: 12
+
+# Vorlage für die Presse-Listen der Landesministerien (Portal-System "Powerslave").
+# Jedes Ministerium führt die Liste unter einem eigenen Pfad; die Artikel-Links enthalten aber immer
+# /pressemitteilungen/ oder /presseinformationen/ und enden auf -<Nummer>.html. eigene_domain schließt
+# Meldungen anderer Behörden aus. Ist der Hauptpfad nicht erreichbar, probiert das Skript die Alternativen,
+# zuletzt die zentrale Liste der Landesregierung (dort stehen nur die jüngsten ~30 Meldungen aller Behörden).
+vorlagen:
+  pressemitteilungen: &pm
+    href_muster: "/(pressemitteilungen|presseinformationen)/[^/?#]+-\\d+\\.html$"
+    eigene_domain: true
+    alternativen:
+      - "/startseite/uber_uns/presse/presseinformationen/"
+      - "/startseite/presseinformationen/"
+      - "/startseite/aktuelles/presseinformationen/"
+      - "/startseite/aktuelles/pressemitteilungen/"
+      - "/presse/pressemitteilungen/"
+      - "/presse/presseinformationen/"
+      - "/startseite/presse/presseinformationen/"
+      - "/aktuelles/pressemitteilungen/"
+      - "https://www.niedersachsen.de/startseite/service/presse/presseinformationen/"
+
+gruppen:
+
+  - titel: Deutschland
+    untertitel: Deutschlandfunk, NDR Info und Tagesschau
+    layout: bloecke
+    max_pro_quelle: 8
+    quellen:
+      - name: Deutschlandfunk
+        farbe: "#1f5fa6"
+        feeds:
+          - {rubrik: Nachrichten, url: "https://www.deutschlandfunk.de/nachrichten-100.rss"}
+          - {rubrik: Politik,     url: "https://www.deutschlandfunk.de/politikportal-100.rss"}
+          - {rubrik: Wirtschaft,  url: "https://www.deutschlandfunk.de/wirtschaft-106.rss"}
+          - {rubrik: Europa,      url: "https://www.deutschlandfunk.de/europa-112.rss"}
+      - name: NDR Info
+        farbe: "#0f766e"
+        feeds: [{url: "https://www.ndr.de/nachrichten/info/index~rss2.xml"}]
+      - name: Tagesschau
+        farbe: "#4338ca"
+        feeds:   # Innenpolitik zuerst: Artikel aus beiden Feeds tragen dann die genauere Rubrik
+          - {rubrik: Innenpolitik, url: "https://www.tagesschau.de/inland/innenpolitik/index~rss2.xml"}
+          - {rubrik: Inland,       url: "https://www.tagesschau.de/inland/index~rss2.xml"}
+
+  - titel: Niedersachsen
+    untertitel: Rundblick, Landtag und die drei neuesten Pressemitteilungen der Ministerien
+    layout: bloecke
+    max_pro_quelle: 5
+    quellen:
+      # Rundblick hat keinen erkennbaren Feed: Das Skript liest die Artikel-Links der Startseite
+      # (Titel, Datum, Kennzeichnung RB+ für Abo-Artikel); ohne_abo blendet RB+-Artikel aus. href_muster schließt Serviceseiten aus.
+      - name: Rundblick Niedersachsen
+        thema: Landespolitik
+        farbe: "#1f2937"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten
+        ohne_abo: true           # nur frei zugängliche Artikel, keine mit RB+
+        feeds:
+          - url: "https://rundblick-niedersachsen.de/"
+            href_muster: "^https://rundblick-niedersachsen\\.de/(?!abonnement|kontakt|suche|login|impressum|datenschutzerklaerung|informationen-nach-dsgvo|archiv|ueber-den-rundblick|niedersachsen-am-sonntag|kategorie|podcast)[^/?#]+$"
+      # Ministerien: nur die drei neuesten Pressemitteilungen (Vorlage &pm), keine weiteren Nachrichten.
+      # Listen-Adressen laut Vorgabe. Ministerien veröffentlichen unregelmäßig: max_alter_stunden: 0 zeigt
+      # die drei neuesten Pressemitteilungen unabhängig vom Alter.
+      - name: Wirtschaft, Verkehr und Bauen
+        thema: Wirtschaft · Verkehr · Bauen
+        farbe: "#b45309"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.mw.niedersachsen.de/startseite/uber_uns/presse/presseinformationen/"}]
+      - name: Staatskanzlei
+        thema: Landespolitik
+        farbe: "#9f1239"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.stk.niedersachsen.de/startseite/presseinformationen/"}]
+      - name: Landtag
+        thema: Landespolitik
+        farbe: "#6d3a8c"
+        feeds: [{url: "https://www.landtag-niedersachsen.de/"}]   # ungeprüft: Feed-Suche über die Startseite
+      - name: Inneres, Sport und Digitalisierung
+        farbe: "#1d4ed8"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.mi.niedersachsen.de/startseite/aktuelles/presseinformationen/"}]
+      - name: Finanzen
+        farbe: "#4d7c0f"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.mf.niedersachsen.de/startseite/aktuelles/presseinformationen/"}]
+      - name: Soziales, Arbeit, Gesundheit und Gleichstellung
+        farbe: "#be185d"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.ms.niedersachsen.de/startseite/uber_uns/presse/presseinformationen/"}]
+      - name: Wissenschaft und Kultur
+        farbe: "#0e7490"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.mwk.niedersachsen.de/startseite/aktuelles/presseinformationen/"}]
+      - name: Kultus
+        farbe: "#a16207"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.mk.niedersachsen.de/startseite/aktuelles/presseinformationen"}]
+      - name: Umwelt, Energie und Klimaschutz
+        farbe: "#15803d"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.umwelt.niedersachsen.de/startseite/aktuelles/pressemitteilungen/"}]
+      - name: Ernährung, Landwirtschaft und Verbraucherschutz
+        farbe: "#7c5a1e"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.ml.niedersachsen.de/presse/pressemitteilungen/"}]
+      - name: Justiz
+        farbe: "#475569"
+        max_pro_quelle: 3
+        max_alter_stunden: 0     # keine Altersgrenze: die drei neuesten, auch wenn sie älter sind
+        feeds: [{<<: *pm, url: "https://www.mj.niedersachsen.de/startseite/aktuelles/presseinformationen/"}]
+
+  - titel: International
+    untertitel: Die fünf wichtigsten Meldungen
+    layout: liste
+    max_gesamt: 5
+    quellen:
+      - name: The New York Times
+        farbe: "#2b2b2b"
+        feeds: [{url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"}]
+      - name: The Economist
+        farbe: "#c8102e"
+        feeds:   # ungeprüft
+          - {url: "https://www.economist.com/leaders/rss.xml"}
+          - {url: "https://www.economist.com/the-world-this-week/rss.xml"}
+
+  # dpa: Es gibt keinen frei zugänglichen dpa-Feed (kostenpflichtiger Dienst).
+  # Medien, die dpa-Meldungen ausspielen, lassen sich wie jede andere Quelle ergänzen, z. B.:
+  #   - name: ZEIT Online
+  #     feeds: [{url: "https://newsfeed.zeit.de/index"}]
