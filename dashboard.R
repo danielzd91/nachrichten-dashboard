@@ -21,7 +21,25 @@ BASIS   <- skript_pfad()
 AUSGABE <- file.path(BASIS, "dashboard.html")
 args    <- commandArgs(trailingOnly = TRUE)
 UA      <- "Mozilla/5.0 (lokales Nachrichten-Dashboard)"
-TZ      <- tryCatch(Sys.timezone(), error = function(e) NA) %||% "Europe/Berlin"
+
+# Anzeige immer in deutscher Zeit (MEZ/MESZ), unabhängig von Systemzeitzone und installierter Zeitzonen-Datenbank
+# (auf GitHub-Servern fehlte sie, die Seite zeigte UTC). Sommerzeit: letzter Sonntag im März bis letzter Sonntag
+# im Oktober, jeweils 01:00 UTC.
+letzter_sonntag <- function(jahr, monat) {
+  tage <- seq(as.Date(sprintf("%d-%02d-01", jahr, monat)), by = "day", length.out = 31)
+  tage <- tage[as.integer(format(tage, "%m")) == monat]
+  max(tage[as.POSIXlt(tage)$wday == 0])
+}
+berlin_offset_h <- function(z) {
+  jahr <- as.POSIXlt(z, tz = "UTC")$year + 1900
+  vapply(seq_along(z), function(i) {
+    if (is.na(z[i])) return(NA_real_)
+    beginn <- as.POSIXct(paste(letzter_sonntag(jahr[i], 3), "01:00:00"), tz = "UTC")
+    ende   <- as.POSIXct(paste(letzter_sonntag(jahr[i], 10), "01:00:00"), tz = "UTC")
+    if (z[i] >= beginn && z[i] < ende) 2 else 1
+  }, numeric(1))
+}
+lokal_fmt <- function(z, fmt) format(z + berlin_offset_h(z) * 3600, fmt, tz = "UTC")
 
 # --- Einlesen: Feeds und Webseiten ----------------------------------------------
 leer <- function() tibble(titel = character(), link = character(),
@@ -123,8 +141,8 @@ datum_aus_text <- function(t) {
     if (length(m) == 4) { tag <- as.integer(m[2]); mon <- match(tolower(substr(m[3], 1, 3)), MONATE_KURZ); jahr <- as.integer(m[4]) }
   }
   if (is.na(tag) || is.na(mon) || is.na(jahr) || mon < 1 || mon > 12 || tag < 1 || tag > 31) return(na)
-  lokal <- as.POSIXct(sprintf("%d-%02d-%02d 00:00:00", jahr, mon, tag), tz = TZ)
-  as.POSIXct(as.numeric(lokal), origin = "1970-01-01", tz = "UTC")
+  mitternacht_utc <- as.POSIXct(sprintf("%d-%02d-%02d 00:00:00", jahr, mon, tag), tz = "UTC")
+  mitternacht_utc - berlin_offset_h(mitternacht_utc + 12 * 3600) * 3600       # 00:00 Uhr deutscher Zeit in UTC
 }
 
 # Die (bis zu vier) Textknoten direkt vor einem Link (au\u00dferhalb anderer Links), n\u00e4chster zuerst: dort steht oft das Datum
@@ -333,18 +351,18 @@ fehler <- zeilen |> filter(!is.na(fehler)) |>
 WOCHENTAGE <- c("Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag")
 MONATE <- c("Januar","Februar","M\u00e4rz","April","Mai","Juni","Juli","August","September",
             "Oktober","November","Dezember")
-jetzt <- as.POSIXlt(Sys.time(), tz = TZ)
+jetzt <- as.POSIXlt(Sys.time() + berlin_offset_h(Sys.time()) * 3600, tz = "UTC")
 datum_text <- sprintf("%s, %d. %s %d", WOCHENTAGE[jetzt$wday + 1], jetzt$mday,
                       MONATE[jetzt$mon + 1], jetzt$year + 1900)
-heute <- as.Date(format(Sys.time(), "%Y-%m-%d", tz = TZ))
+heute <- as.Date(lokal_fmt(Sys.time(), "%Y-%m-%d"))
 
 zeit_text <- function(z) vapply(seq_along(z), function(i) {
   if (is.na(z[i])) return("")
-  tag <- as.Date(format(z[i], "%Y-%m-%d", tz = TZ)); uhr <- format(z[i], "%H:%M", tz = TZ)
+  tag <- as.Date(lokal_fmt(z[i], "%Y-%m-%d")); uhr <- lokal_fmt(z[i], "%H:%M")
   uhr <- if (uhr == "00:00") "" else paste0(" ", uhr)      # Quellen nur mit Datum: ohne Uhrzeit
   if (tag == heute) paste0("heute", uhr)
   else if (tag == heute - 1) paste0("gestern", uhr)
-  else paste0(format(z[i], "%d.%m.", tz = TZ), uhr)
+  else paste0(lokal_fmt(z[i], "%d.%m."), uhr)
 }, character(1))
 
 css <- '
@@ -431,12 +449,13 @@ seite <- tags$html(lang = "de",
             tags$title("Nachrichten"), tags$style(HTML(css))),
   tags$body(tags$div(class = "seite",
     tags$div(class = "kopf", tags$h1("Nachrichten"),
-             tags$span(class = "datum", paste0(datum_text, ", Stand ", format(Sys.time(), "%H:%M", tz = TZ), " Uhr"))),
+             tags$span(class = "datum", paste0(datum_text, ", Stand ", lokal_fmt(Sys.time(), "%H:%M"), " Uhr"))),
     tags$nav(class = "nav", map(seq_along(gruppen), \(i) tags$a(href = paste0("#g", i), gruppen[[i]]$titel))),
     map(seq_along(gruppen), \(i) gruppe_html(gruppen[[i]], i)),
     if (nrow(fehler) > 0) tags$div(class = "fehler",
       tags$strong("Nicht abrufbar:"), tags$ul(map(fehler$text, tags$li))))))
 
 save_html(seite, AUSGABE)
-cat(sprintf("Dashboard geschrieben: %s  (%d Feed(s) mit Fehler)\n", AUSGABE, nrow(fehler)))
+cat(sprintf("Dashboard geschrieben: %s  (%d Feed(s) mit Fehler)\nStand (deutsche Zeit): %s Uhr; UTC: %s\n", AUSGABE, nrow(fehler),
+            lokal_fmt(Sys.time(), "%d.%m.%Y %H:%M"), format(Sys.time(), "%H:%M", tz = "UTC")))
 if (!("--no-open" %in% args)) browseURL(paste0("file://", normalizePath(AUSGABE)))
