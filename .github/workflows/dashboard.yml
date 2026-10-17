@@ -2,10 +2,19 @@ name: Dashboard bauen und verschlüsselt veröffentlichen
 
 on:
   schedule:
-    # 05:15 UTC = 06:15 Uhr Sommerzeit bzw. 05:15 Uhr Winterzeit. GitHub startet geplante Läufe oft
-    # einige Minuten später.
-    - cron: "15 4 * * *"
-  workflow_dispatch:        # zusätzlich von Hand startbar (Reiter Actions -> Run workflow)
+    # Stündlich zur Minute 7. Die Uhrzeiten in cron gelten in UTC und kennen keine Sommerzeit. Deshalb laufen die
+    # UTC-Stunden 4 bis 19, und der Job "zeitfenster" lässt nur Läufe zwischen 06:00 und 20:59 Uhr deutscher
+    # Zeit durch (Sommer: 06:07 bis 20:07 Uhr, Winter ebenso). GitHub startet geplante Läufe nicht minutengenau
+    # und überspringt sie bei hoher Last gelegentlich.
+    - cron: "7 4-19 * * *"
+  push:                       # jede Änderung an Skript, Quellen oder Workflow baut die Seite sofort neu
+    branches: [main, master]
+    paths:
+      - dashboard.R
+      - quellen.yaml
+      - .staticrypt.json
+      - .github/workflows/dashboard.yml
+  workflow_dispatch:          # zusätzlich von Hand startbar (Reiter Actions -> Run workflow)
 
 permissions:
   contents: read
@@ -20,7 +29,37 @@ env:
   TZ: Europe/Berlin         # sonst zeigt das Dashboard Uhrzeiten in UTC
 
 jobs:
+  zeitfenster:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      aktiv: ${{ steps.pruefen.outputs.aktiv }}
+    steps:
+      - name: Liegt der Lauf zwischen 06:00 und 20:59 Uhr deutscher Zeit?
+        id: pruefen
+        env:
+          EREIGNIS: ${{ github.event_name }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import calendar, datetime as dt, os, sys
+          jetzt = dt.datetime.now(dt.timezone.utc)
+          if os.environ.get("JETZT_UTC"):                       # nur für Tests
+              jetzt = dt.datetime.fromisoformat(os.environ["JETZT_UTC"]).replace(tzinfo=dt.timezone.utc)
+          def letzter_sonntag(jahr, monat):
+              ende = dt.datetime(jahr, monat, calendar.monthrange(jahr, monat)[1], 1, tzinfo=dt.timezone.utc)
+              return ende - dt.timedelta(days=(ende.weekday() + 1) % 7)
+          # Sommerzeit: letzter Sonntag im März bis letzter Sonntag im Oktober, jeweils 01:00 UTC
+          sommer = letzter_sonntag(jetzt.year, 3) <= jetzt < letzter_sonntag(jetzt.year, 10)
+          lokal = jetzt + dt.timedelta(hours=2 if sommer else 1)
+          ereignis = os.environ.get("EREIGNIS", "")
+          aktiv = ereignis != "schedule" or 6 <= lokal.hour <= 20
+          print(f"Ereignis {ereignis}, deutsche Zeit {lokal:%H:%M}, aktiv: {aktiv}", file=sys.stderr)
+          print(f"aktiv={'true' if aktiv else 'false'}")
+          PY
+
   build:
+    needs: zeitfenster
+    if: needs.zeitfenster.outputs.aktiv == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
