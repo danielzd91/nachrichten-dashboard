@@ -52,7 +52,7 @@ jobs:
           sommer = letzter_sonntag(jetzt.year, 3) <= jetzt < letzter_sonntag(jetzt.year, 10)
           lokal = jetzt + dt.timedelta(hours=2 if sommer else 1)
           ereignis = os.environ.get("EREIGNIS", "")
-          aktiv = ereignis != "schedule" or 6 <= lokal.hour <= 20
+          aktiv = ereignis != "schedule" or 5 <= lokal.hour <= 19
           print(f"Ereignis {ereignis}, deutsche Zeit {lokal:%H:%M}, aktiv: {aktiv}", file=sys.stderr)
           print(f"aktiv={'true' if aktiv else 'false'}")
           PY
