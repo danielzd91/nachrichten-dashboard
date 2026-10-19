@@ -2,11 +2,12 @@ name: Dashboard bauen und verschlüsselt veröffentlichen
 
 on:
   schedule:
-    # Stündlich zur Minute 7. Die Uhrzeiten in cron gelten in UTC und kennen keine Sommerzeit. Deshalb laufen die
-    # UTC-Stunden 4 bis 19, und der Job "zeitfenster" lässt nur Läufe zwischen 06:00 und 20:59 Uhr deutscher
-    # Zeit durch (Sommer: 06:07 bis 20:07 Uhr, Winter ebenso). GitHub startet geplante Läufe nicht minutengenau
-    # und überspringt sie bei hoher Last gelegentlich.
-    - cron: "7 4-19 * * *"
+    # Zwei Auslöser je Stunde (Minute 7 und 37), damit ein ausgefallener oder stark verspäteter Auslöser
+    # kaum auffällt: GitHub garantiert geplante Läufe nicht. Gebaut wird trotzdem höchstens etwa einmal je
+    # Stunde, weil der Job "zeitfenster" Läufe überspringt, wenn die Seite vor weniger als 40 Minuten
+    # veröffentlicht wurde. cron gilt in UTC ohne Sommerzeit; deshalb laufen die UTC-Stunden 4 bis 19, und
+    # derselbe Job lässt nur Läufe zwischen 06:00 und 20:59 Uhr deutscher Zeit durch.
+    - cron: "7,37 4-19 * * *"
   push:                       # jede Änderung an Skript, Quellen oder Workflow baut die Seite sofort neu
     branches: [main, master]
     paths:
@@ -18,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  deployments: read      # letzte Veröffentlichung abfragen (zeitfenster)
   pages: write
   id-token: write
 
@@ -35,10 +37,20 @@ jobs:
     outputs:
       aktiv: ${{ steps.pruefen.outputs.aktiv }}
     steps:
-      - name: Liegt der Lauf zwischen 06:00 und 20:59 Uhr deutscher Zeit?
+      - name: Zeitpunkt der letzten Veröffentlichung abfragen
+        id: letzte
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Schlägt die Abfrage fehl oder gibt es noch keine Veröffentlichung, bleibt der Wert leer: dann wird gebaut.
+          ts=$(gh api "repos/${{ github.repository }}/deployments?environment=github-pages&per_page=1" --jq '.[0].created_at // empty' 2>/dev/null || true)
+          echo "ts=$ts" >> "$GITHUB_OUTPUT"
+
+      - name: Prüfen, ob gebaut werden soll
         id: pruefen
         env:
           EREIGNIS: ${{ github.event_name }}
+          LETZTE: ${{ steps.letzte.outputs.ts }}
         run: |
           python3 - >> "$GITHUB_OUTPUT" <<'PY'
           import calendar, datetime as dt, os, sys
@@ -52,8 +64,25 @@ jobs:
           sommer = letzter_sonntag(jetzt.year, 3) <= jetzt < letzter_sonntag(jetzt.year, 10)
           lokal = jetzt + dt.timedelta(hours=2 if sommer else 1)
           ereignis = os.environ.get("EREIGNIS", "")
-          aktiv = ereignis != "schedule" or 5 <= lokal.hour <= 19
-          print(f"Ereignis {ereignis}, deutsche Zeit {lokal:%H:%M}, aktiv: {aktiv}", file=sys.stderr)
+          aktiv = True
+          grund = "kein geplanter Lauf: immer bauen"
+          if ereignis == "schedule":
+              if not 6 <= lokal.hour <= 20:
+                  aktiv, grund = False, "außerhalb 06:00 bis 20:59 Uhr"
+              else:
+                  grund = "im Zeitfenster"
+                  letzte = os.environ.get("LETZTE", "").strip()
+                  if letzte:
+                      try:
+                          alter = jetzt - dt.datetime.fromisoformat(letzte.replace("Z", "+00:00"))
+                          minuten = alter.total_seconds() / 60
+                          if minuten < 40:
+                              aktiv, grund = False, f"Seite ist erst {minuten:.0f} Minuten alt"
+                          else:
+                              grund = f"Seite ist {minuten:.0f} Minuten alt"
+                      except ValueError:
+                          grund = "Zeitstempel nicht lesbar: bauen"
+          print(f"Ereignis {ereignis}, deutsche Zeit {lokal:%H:%M}: {grund} -> aktiv: {aktiv}", file=sys.stderr)
           print(f"aktiv={'true' if aktiv else 'false'}")
           PY
 
