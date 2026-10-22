@@ -2,12 +2,10 @@ name: Dashboard bauen und verschlüsselt veröffentlichen
 
 on:
   schedule:
-    # Zwei Auslöser je Stunde (Minute 7 und 37), damit ein ausgefallener oder stark verspäteter Auslöser
-    # kaum auffällt: GitHub garantiert geplante Läufe nicht. Gebaut wird trotzdem höchstens etwa einmal je
-    # Stunde, weil der Job "zeitfenster" Läufe überspringt, wenn die Seite vor weniger als 40 Minuten
-    # veröffentlicht wurde. cron gilt in UTC ohne Sommerzeit; deshalb laufen die UTC-Stunden 4 bis 19, und
-    # derselbe Job lässt nur Läufe zwischen 06:00 und 20:59 Uhr deutscher Zeit durch.
-    - cron: "7,37 4-19 * * *"
+    # Alle zwei Stunden zur Minute 17 (UTC-Stunden 0, 2, ... 22 = 12 Läufe am Tag). Die Zeit gilt in UTC ohne
+    # Sommerzeit, die deutsche Uhrzeit verschiebt sich also zweimal im Jahr um eine Stunde. GitHub startet
+    # geplante Läufe nicht minutengenau und lässt sie bei hoher Last gelegentlich aus.
+    - cron: "17 */2 * * *"
   push:                       # jede Änderung an Skript, Quellen oder Workflow baut die Seite sofort neu
     branches: [main, master]
     paths:
@@ -19,7 +17,6 @@ on:
 
 permissions:
   contents: read
-  deployments: read      # letzte Veröffentlichung abfragen (zeitfenster)
   pages: write
   id-token: write
 
@@ -31,64 +28,7 @@ env:
   TZ: Europe/Berlin         # sonst zeigt das Dashboard Uhrzeiten in UTC
 
 jobs:
-  zeitfenster:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      aktiv: ${{ steps.pruefen.outputs.aktiv }}
-    steps:
-      - name: Zeitpunkt der letzten Veröffentlichung abfragen
-        id: letzte
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Schlägt die Abfrage fehl oder gibt es noch keine Veröffentlichung, bleibt der Wert leer: dann wird gebaut.
-          ts=$(gh api "repos/${{ github.repository }}/deployments?environment=github-pages&per_page=1" --jq '.[0].created_at // empty' 2>/dev/null || true)
-          echo "ts=$ts" >> "$GITHUB_OUTPUT"
-
-      - name: Prüfen, ob gebaut werden soll
-        id: pruefen
-        env:
-          EREIGNIS: ${{ github.event_name }}
-          LETZTE: ${{ steps.letzte.outputs.ts }}
-        run: |
-          python3 - >> "$GITHUB_OUTPUT" <<'PY'
-          import calendar, datetime as dt, os, sys
-          jetzt = dt.datetime.now(dt.timezone.utc)
-          if os.environ.get("JETZT_UTC"):                       # nur für Tests
-              jetzt = dt.datetime.fromisoformat(os.environ["JETZT_UTC"]).replace(tzinfo=dt.timezone.utc)
-          def letzter_sonntag(jahr, monat):
-              ende = dt.datetime(jahr, monat, calendar.monthrange(jahr, monat)[1], 1, tzinfo=dt.timezone.utc)
-              return ende - dt.timedelta(days=(ende.weekday() + 1) % 7)
-          # Sommerzeit: letzter Sonntag im März bis letzter Sonntag im Oktober, jeweils 01:00 UTC
-          sommer = letzter_sonntag(jetzt.year, 3) <= jetzt < letzter_sonntag(jetzt.year, 10)
-          lokal = jetzt + dt.timedelta(hours=2 if sommer else 1)
-          ereignis = os.environ.get("EREIGNIS", "")
-          aktiv = True
-          grund = "kein geplanter Lauf: immer bauen"
-          if ereignis == "schedule":
-              if not 6 <= lokal.hour <= 20:
-                  aktiv, grund = False, "außerhalb 06:00 bis 20:59 Uhr"
-              else:
-                  grund = "im Zeitfenster"
-                  letzte = os.environ.get("LETZTE", "").strip()
-                  if letzte:
-                      try:
-                          alter = jetzt - dt.datetime.fromisoformat(letzte.replace("Z", "+00:00"))
-                          minuten = alter.total_seconds() / 60
-                          if minuten < 40:
-                              aktiv, grund = False, f"Seite ist erst {minuten:.0f} Minuten alt"
-                          else:
-                              grund = f"Seite ist {minuten:.0f} Minuten alt"
-                      except ValueError:
-                          grund = "Zeitstempel nicht lesbar: bauen"
-          print(f"Ereignis {ereignis}, deutsche Zeit {lokal:%H:%M}: {grund} -> aktiv: {aktiv}", file=sys.stderr)
-          print(f"aktiv={'true' if aktiv else 'false'}")
-          PY
-
   build:
-    needs: zeitfenster
-    if: needs.zeitfenster.outputs.aktiv == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
