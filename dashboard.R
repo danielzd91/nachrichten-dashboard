@@ -380,6 +380,9 @@ body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-app
 .nav{display:flex;gap:18px;flex-wrap:wrap;padding:6px 0 0}
 .nav a{color:var(--mut);text-decoration:none;font-weight:600;font-size:.95rem;padding:2px 0;border-bottom:2px solid transparent}
 .nav a:hover,.nav a:focus-visible{color:var(--tx);border-bottom-color:var(--tx);outline:none}
+.nav .aktionen{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+.nav .aktionen a{border:1px solid var(--li);border-radius:6px;padding:3px 12px;background:var(--fl);color:var(--tx);font-weight:600}
+.nav .aktionen a:hover,.nav .aktionen a:focus-visible{border-color:var(--tx);border-bottom-color:var(--tx)}
 .gruppe{margin-top:40px}
 .gruppe>h2{margin:0;font-size:1.5rem;font-weight:750}
 .gruppe>.unter{margin:2px 0 16px;color:var(--mut);font-size:.95rem}
@@ -443,6 +446,12 @@ gruppe_html <- function(g, i) {
                if (nzchar(g$untertitel)) tags$div(class = "unter", g$untertitel), inhalt)
 }
 
+# Link "Aktualisierung starten": öffnet auf GitHub die Seite des Workflows, dort "Run workflow" wählen.
+# Die Adresse stammt aus dem GitHub-Lauf selbst (GITHUB_REPOSITORY) oder aus aktualisieren_url in quellen.yaml.
+repo <- Sys.getenv("GITHUB_REPOSITORY")
+aktualisieren_url <- feld(cfg, "aktualisieren_url",
+  if (nzchar(repo)) sprintf("https://github.com/%s/actions/workflows/dashboard.yml", repo) else NA_character_)
+
 seite <- tags$html(lang = "de",
   tags$head(tags$meta(charset = "utf-8"),
             tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
@@ -450,7 +459,13 @@ seite <- tags$html(lang = "de",
   tags$body(tags$div(class = "seite",
     tags$div(class = "kopf", tags$h1("Nachrichten"),
              tags$span(class = "datum", paste0(datum_text, ", Stand ", lokal_fmt(Sys.time(), "%H:%M"), " Uhr"))),
-    tags$nav(class = "nav", map(seq_along(gruppen), \(i) tags$a(href = paste0("#g", i), gruppen[[i]]$titel))),
+    tags$nav(class = "nav", map(seq_along(gruppen), \(i) tags$a(href = paste0("#g", i), gruppen[[i]]$titel)),
+      tags$span(class = "aktionen",
+        tags$a(href = "", onclick = "location.reload();return false", title = "Seite neu laden", "Neu laden"),
+        if (!is.na(aktualisieren_url))
+          tags$a(href = aktualisieren_url, target = "_blank", rel = "noopener",
+                 title = "\u00d6ffnet GitHub: dort Run workflow w\u00e4hlen. Der Bau dauert einige Minuten, danach Neu laden.",
+                 "Aktualisierung starten"))),
     map(seq_along(gruppen), \(i) gruppe_html(gruppen[[i]], i)),
     if (nrow(fehler) > 0) tags$div(class = "fehler",
       tags$strong("Nicht abrufbar:"), tags$ul(map(fehler$text, tags$li))))))
